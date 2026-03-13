@@ -13,13 +13,13 @@ import sys
 import unicodedata
 from dotenv import load_dotenv
 import streamlit as st
-from docx import Document
 from langchain_community.document_loaders import WebBaseLoader
 from langchain.text_splitter import CharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import Chroma
 import constants as ct
 from langchain_core.documents import Document
+import csv
 
 
 ############################################################
@@ -215,21 +215,43 @@ def file_load(path, docs_all):
 
     # 想定していたファイル形式の場合のみ読み込む
     if file_extension in ct.SUPPORTED_EXTENSIONS:
-        # ファイルの拡張子に合ったdata loaderを使ってデータ読み込み
+
+        # CSVの場合は自作Loaderで処理
         if file_extension == ".csv":
-            loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
-            docs = loader.load()
-            merged_text = "\n".join([doc.page_content for doc in docs])
-            csv_doc= Document(
+
+            row_texts = []
+
+            with open(path, "r", encoding="cp932") as f:
+                reader = csv.DictReader(f)
+
+                for row in reader:
+                    column_texts = []
+
+                    for key, value in row.items():
+                        if value:  # 空データ除外
+                            column_texts.append(f"{key}: {value}")
+
+                    row_text = "--- レコード ---\n" + "\n".join(column_texts)
+                    row_texts.append(row_text)
+
+            merged_text = (
+                f"以下は {os.path.basename(path)} の一覧です。\n\n"
+                + "\n\n".join(row_texts)
+            )
+            #print(f"内容:{merged_text}")
+
+            csv_doc = Document(
                 page_content=merged_text,
                 metadata={"source": path}
             )
+
             docs_all.append(csv_doc)
+
+        # CSV以外（PDF / DOCX / TXT など）
         else:
             loader = ct.SUPPORTED_EXTENSIONS[file_extension](path)
             docs = loader.load()
-            docs_all.extend(docs)       
-
+            docs_all.extend(docs)
 
 def adjust_string(s):
     """
