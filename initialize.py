@@ -119,18 +119,52 @@ def initialize_retriever():
         for key in doc.metadata:
             doc.metadata[key] = adjust_string(doc.metadata[key])
     
+    #csvのときはsplitサイズを分けるため、CSVとそれ以外のドキュメントを分ける
+    csv_docs = []
+    other_docs = []
+
+    for doc in docs_all:
+        source = doc.metadata.get("source", "")
+        if source.lower().endswith(".csv"):
+            csv_docs.append(doc)
+        else:
+            other_docs.append(doc)
+    
     # 埋め込みモデルの用意
     embeddings = OpenAIEmbeddings()
     
-    # チャンク分割用のオブジェクトを作成
-    text_splitter = CharacterTextSplitter(
-        chunk_size=ct.CHUNK_SIZE,
-        chunk_overlap=ct.CHUNK_OVERLAP,
+    # チャンク_CSV分割用のオブジェクトを作成
+    text_splitter_csv = CharacterTextSplitter(
+        chunk_size=ct.CHUNK_SIZE_CSV,
+        chunk_overlap=ct.CHUNK_OVERLAP_CSV,
+        separator="--- レコード ---"
+    )
+    # チャンク_CSV分割用のオブジェクトを作成
+    text_splitter_doc = CharacterTextSplitter(
+        chunk_size=ct.CHUNK_SIZE_DOC,
+        chunk_overlap=ct.CHUNK_OVERLAP_DOC,
         separator="\n"
     )
 
-    # チャンク分割を実施
-    splitted_docs = text_splitter.split_documents(docs_all)
+
+
+    # チャンク分割を実施 （CSVとそれ以外のドキュメントで分けて実施）
+    splitted_docs = []
+    if csv_docs:
+        splitted_docs.extend(text_splitter_csv.split_documents(csv_docs))
+    if other_docs:splitted_docs.extend(text_splitter_doc.split_documents(other_docs))
+    
+    
+    # ===== デバッグ（ここ追加）=====
+    with open("debug_chunks.txt", "w", encoding="utf-8") as f:
+        for i, doc in enumerate(splitted_docs):
+            f.write(f"\n--- chunk {i} ---\n")
+            f.write(str(doc.metadata))
+            f.write("\n")
+            f.write(f"文字数: {len(doc.page_content)}\n")
+            f.write(doc.page_content)
+            f.write("\n")
+    # ==============================
 
     # ベクターストアの作成
     db = Chroma.from_documents(splitted_docs, embedding=embeddings)
